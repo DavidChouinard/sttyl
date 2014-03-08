@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <string.h>
 #include <termios.h>
 
 #include "tables.h"
@@ -42,6 +43,7 @@ int main(int argc, char* argv[]) {
     parse_args(&ttyp, argc, argv);
 
     // Update settings
+    // TODO: compare for error
     if (tcsetattr(0, TCSANOW, &ttyp) == -1) {
         perror("Unable to update terminal settings");
         exit(1);
@@ -96,21 +98,35 @@ void print_flag(int flag, const struct trecord table[]) {
 void parse_args(struct termios *ttyp, int argc, char* argv[]) {
     char *flag_name;
     bool enable_flag;    // true if we want to set the flag, false to unset
+    cc_t cc_i;    // index of control character to operate on
 
     // TODO: argument validation
     for (int i = 1; i < argc; ++i) {
-        enable_flag = (argv[i][0] != '-');
+        cc_i = '\0';
 
-        // If to flag is to be disabled, the actual flag name starts at the
-        // second character
-        flag_name = (enable_flag) ? argv[i] : (argv[i] + 1);
+        if (strcmp(argv[i], "erase") == 0)
+            cc_i = VERASE;
+        else if (strcmp(argv[i], "kill") == 0)
+            cc_i = VKILL;
 
-        /*tcflag_t c_iflag;      [> input modes <]*/
-           /*tcflag_t c_oflag;      [> output modes <]*/
-           /*tcflag_t c_cflag;      [> control modes <]*/
+        if (cc_i != '\0') {
+            // TODO: validate size of i++ exists and is only one char
+            ttyp->c_cc[cc_i] = argv[++i][0];
+        } else {
+            printf("%s", argv[i]);
+            enable_flag = (argv[i][0] != '-');
 
-        ttyp->c_iflag = update_flag(ttyp->c_iflag, flag_name, enable_flag, input_flags);
-        ttyp->c_lflag = update_flag(ttyp->c_lflag, flag_name, enable_flag, local_flags);
+            // If to flag is to be disabled, the actual flag name starts at the
+            // second character
+            flag_name = (enable_flag) ? argv[i] : (argv[i] + 1);
+
+            /*tcflag_t c_iflag;      [> input modes <]*/
+               /*tcflag_t c_oflag;      [> output modes <]*/
+               /*tcflag_t c_cflag;      [> control modes <]*/
+
+            ttyp->c_iflag = update_flag(ttyp->c_iflag, flag_name, enable_flag, input_flags);
+            ttyp->c_lflag = update_flag(ttyp->c_lflag, flag_name, enable_flag, local_flags);
+        }
     }
 }
 

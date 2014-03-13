@@ -31,40 +31,54 @@ const struct trecord baud_rates[] = {
 
 // A subset of relevant control characters
 const struct trecord control_characters[] = {
-    {VERASE, "erase"},
-    {VKILL, "kill"},
     {VINTR, "intr"},
+    {VQUIT, "vquit"},
+    {VERASE, "erase"},
+    {VEOF, "veof"},
+    {VEOL, "veol"},
+    {VEOL2, "veol2"},
+    {VSTART, "vstart"},
+    {VSTOP, "vstop"},
+    {VMIN, "min"},
+    {VTIME, "time"},
     {0, NULL}
 };
 
 // A subset of relevant flags
 const struct trecord input_flags[] = {
+    /*{IGNBRK, "ignbrk"},*/
+    /*{BRKINT, "brkint"},*/
+    /*{IGNPAR, "ignpar"},*/
+    /*{PARMRK, "parmrk"},*/
+    /*{INPCK, "inpck"},*/
+    /*{ISTRIP, "istrip"},*/
+    /*{INLCR, "inlcr"},*/
+    /*{IGNCR, "igncr"},*/
+    /*{IUCLC, "iuclc"},*/
+    /*{IXON, "ixon"},*/
+    /*{IXANY, "ixany"},*/
+    /*{IXOFF, "ixoff"},*/
+    /*{IMAXBEL, "imaxbel"},*/
+    /*{IUTF8, "iutf8"},*/
     {ICRNL, "icrnl"},
-    {ICANON, "icanon"},
-    {ISIG, "isig"},
+    {0, NULL}
+};
+
+const struct trecord output_flags[] = {
+    {ONLCR, "onlcr"},
+    {OLCUC, "olcuc"}, // Not standard in POSIX
     {0, NULL}
 };
 
 const struct trecord local_flags[] = {
     {ECHO, "echo"},
     {ECHOE, "echoe"},
+    {ISIG, "isig"},
+    {ICANON, "icanon"},
     {0, NULL}
 };
 
-const struct trecord control_flags[] = {
-    {OLCUC, "olcuc"}, // Not standard in POSIX
-    {0, NULL}
-};
-
-
-// TODO: output flags?
-
-/*const struct trecord tables[][8] = {input_flags, local_flags, control_flags};*/
-
-int get_flag_mask(char *flag_name, const struct trecord *table) {
-    /*symbol = */
-    // TODO: lowercase
-
+tcflag_t get_flag_mask(char *flag_name, const struct trecord *table) {
     for (int i = 0; table[i].name != NULL; i++) {
         if (strcmp(table[i].name, flag_name) == 0)
             return table[i].value;

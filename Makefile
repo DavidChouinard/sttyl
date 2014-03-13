@@ -6,7 +6,7 @@
 #
 
 sttyl: sttyl.c tables.h tables.c
-	gcc sttyl.c tables.c -o sttyl -Wall -std=c99
+	gcc sttyl.c tables.c -o sttyl -Wall -std=gnu99
 
 clean:
 	rm -f *.o core sttyl

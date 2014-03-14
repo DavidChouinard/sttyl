@@ -1,14 +1,13 @@
 /*
- * pfind.c
+ * sttyl.c
  *
  * Author: David Chouinard
- *   Date: Feb 28 2014
- *   Desc: pfind recursively traverses the passed directory and prints all
- *         files that fullfil the passed name pattern and file type conditions.
- *         It is meant as a drop-in replacement for the GNU find utility (but
- *         only provides a subset of functionality).
+ *   Date: March 5 2014
+ *   Desc: sttyl prints or changes current terminal settings. It operates on
+ *         control chracters and a subset of input, output and local flags.
+ *         It is meant as a replacement for the GNU stty utility (but only provides a subset of functionality).
  *  Usage:
- *         pfind starting_dir [-name filename-or-pattern] [-type {f|d|b|c|p|l|s}]
+ *         sttyl [SETTING]...
  */
 
 #include <stdio.h>
@@ -20,6 +19,10 @@
 #include <ctype.h>
 
 #include "tables.h"
+
+
+#define CHAR_HIGH_ORDER_BIT (1 << 7)  /* High-order bit of an 8-bit char */
+
 
 /* prototypes */
 void print_settings(struct termios *ttyp);
@@ -45,11 +48,12 @@ int main(int argc, char* argv[]) {
     }
 
     if (argc <= 1)
-        print_settings(&ttyp);
+        print_settings(&ttyp); // user just wants to see current setting status
 
+    // Parse args and call appropriate functions for processing
     parse_args(&ttyp, argc, argv);
 
-    // Update settings
+    // Update settings and verify the save
     save_tty(&ttyp);
 }
 
@@ -61,12 +65,13 @@ int main(int argc, char* argv[]) {
  */
 void print_settings(struct termios *ttyp) {
     print_baud(cfgetospeed(ttyp));
+    putchar('\n');
 
     print_characters(ttyp->c_cc);
-    puts("");
+    putchar('\n');
 
     print_flags(ttyp);
-    puts("");
+    putchar('\n');
 
     exit(EXIT_SUCCESS);
 }
@@ -111,7 +116,7 @@ void print_characters(cc_t cc[]) {
             printf("<undef>");  // control character is disabled
         } else {
             if (!isascii(ch)) {
-                ch &= ~(1 << 7); // get the ascii part of the character
+                ch &= ~CHAR_HIGH_ORDER_BIT; // get the ascii part of the character
                 printf("M-");
             }
             if (iscntrl(ch)) {
@@ -127,15 +132,17 @@ void print_characters(cc_t cc[]) {
 }
 
 /*
- * Prints a susbset of relevant input, output and local modes ("flags") in
- * human-readable format
+ * Prints a susbset of relevant input, output and local modes/flags (each on one
+ * line) in human-readable format.
  *
  * Arguments:
  *    struct termios *ttyp: termios structure of the relevant terminal
  */
 void print_flags(struct termios *ttyp) {
     print_flags_from_table(ttyp->c_iflag, input_flags);
+    putchar('\n');
     print_flags_from_table(ttyp->c_oflag, output_flags);
+    putchar('\n');
     print_flags_from_table(ttyp->c_lflag, local_flags);
 }
 
@@ -162,14 +169,9 @@ void print_flags_from_table(tcflag_t flag, const struct trecord *table) {
  *    int argc: argument count, to be passed from main
  *    char* argv[]: argument array, to be passed from main
  */
-// TODO: 30 lines
 void parse_args(struct termios *ttyp, int argc, char* argv[]) {
-    char *flag_name;
-    bool enable_flag;    // true if we want to set the flag, false to unset
-    cc_t cc_i;    // index of control character to operate on
-
     for (int i = 1; i < argc; ++i) {
-        cc_i = '\0';
+        cc_t cc_i = '\0';  // index of control character to operate on
 
         if (strcmp(argv[i], "erase") == 0)
             cc_i = VERASE;
@@ -184,10 +186,10 @@ void parse_args(struct termios *ttyp, int argc, char* argv[]) {
 
             ttyp->c_cc[cc_i] = argv[++i][0];
         } else {
-            enable_flag = (argv[i][0] != '-');
+            bool enable_flag = (argv[i][0] != '-');  // false to unset flag
 
             // If flag is disabled, the flag name starts at the second char
-            flag_name = (enable_flag) ? argv[i] : (argv[i] + 1);
+            char *flag_name = (enable_flag) ? argv[i] : (argv[i] + 1);
 
             if (!is_valid_flag_name(flag_name))
                 argument_error("invalid argument `%s'", argv[i]);
@@ -218,9 +220,9 @@ void argument_error(char *message, char *argument) {
  *    char *flag_name: flag name to validate
  */
 bool is_valid_flag_name(char *flag_name) {
-    return (get_flag_mask(flag_name, input_flags) != -1 ||
-            get_flag_mask(flag_name, output_flags) != -1 ||
-            get_flag_mask(flag_name, local_flags) != -1);
+    return (get_flag_mask(flag_name, input_flags).name != NULL ||
+            get_flag_mask(flag_name, output_flags).name != NULL ||
+            get_flag_mask(flag_name, local_flags).name != NULL);
 }
 
 /*
@@ -252,15 +254,15 @@ void update_flag(struct termios *ttyp, char *flag_name, bool enable_flag) {
  */
 tcflag_t update_flag_struct(tcflag_t flag, char *flag_name, bool enable_flag,
         const struct trecord *table) {
-    int mask = get_flag_mask(flag_name, table);
+    struct trecord record = get_flag_mask(flag_name, table);
 
-    if (mask == -1)
+    if (record.name == NULL)
         return flag;  // we don't know about that, nothing to do here
 
     if (enable_flag)
-        return (flag |= mask);   // turn on masked bit
+        return (flag |= record.value);   // turn on masked bit
     else
-        return (flag &= ~mask);  // turn off masked bit
+        return (flag &= ~record.value);  // turn off masked bit
 }
 
 /*

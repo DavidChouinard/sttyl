@@ -1,0 +1,100 @@
+Project: pfind
+
+Purpose: sttyl prints or changes terminal settings (replacement for stty)
+
+Outline:
+        If given no arguments, sttyl outputs to stdout the state of the
+        following terminal settings:
+
+            * Baud rate
+            * intr, erase, and kill control characters
+            * Setting for the following flags:
+                * Input flags: icrnl
+                * Output flags: onlcr, olcuc
+                * Local flags: echo, echoe, sigi, icanon
+
+        sttyl can also update any of the above settings, aside from the baud
+        rate. Several settings can be updated simultaneously in a single call
+        to sttyl.
+
+        The tool also thoroughly verifies that the requested changes were
+        successfully saved and outputs any error to stderr.
+
+        sttyl is meant as a replacement for the equivalent GNU stty utility,
+        but only provides a subset of functionality).
+
+Output:
+        When called with no argument, stty outputs the current terminal
+        settings. It looks like:
+
+            speed <baud rate> baud;
+            intr = <character>; kill = <character>; erase = <character>;
+            <input flags>
+            <output flags>
+            <local flags>
+
+        When updating existing settings, sttyl will only print error messages
+        (sttyl outputs nothing on success). If sttyl encounters a error parsing
+        arguments or interacting with the kernel, it outputs its error to
+        stderr and exits with non-zero status.
+
+Arguments:
+        All arguments to sttyl are optional; sttyl will output current settings
+        if given no argument. sttyl's usage is as follows:
+
+            sttyl [SETTING]...
+
+        Where SETTING is either:
+
+            * A control flag (eg. icrnl). If preceded by a dash (eg. -icrnl),
+              the flag is disabled, else the flag is enabled.
+            * A control character followed by a single character to set as its
+              value, seperated by a space (eg. `erase k')
+
+        The following are acceptable flag name values: icrnl, onlcr, olcuc,
+        echo, echoe, sigi, icanon
+
+        The following are acceptable control character names: intr, kill, erase
+
+        Any number of setting arguments can be passed and they can be provided
+        in any order. If duplicate settings are provided, the last one is
+        considered. sttyl outputs an error (to stderr) when malformed arguments
+        are passed.
+
+Input:
+        sttyl does not accept any user input over STDIN.
+
+Data Structures:
+        sttyl's functionality is principally achieved by operating on the
+        termios structure returned by tcgetattr.
+
+        sttyl uses a table-driven approach to map human-readable symbols to
+        internal values used to operate on the termios structure (eg. mapping
+        "kill" to VKILL). The following five tables are required by sttyl:
+
+          * baud_rates
+          * control_characters
+          * input_flags
+          * output_flags
+          * local_flags
+
+        Tables are defined in table.c and their interface is available in
+        table.h. Tables are implemented as an array of structs which contain
+        an integer value and a char* name.
+
+        A table ends with a sentinel struct who's name element is NULL (eg.
+        {0, NULL}). Therefore, this design decision implies that the table data
+        structure cannot contain legitmate NULL names, which is acceptable for
+        this application.
+
+        table.h also declares a single helper function (get_flag_mask)
+        for searching the table data structure and finding a matching record
+        given a name. It returns a {0, NULL} record structure if a matching
+        record is not found.
+
+        If tables grew to be much larger, using a hash table would be more
+        efficient and would avoid O(n) sequential searches.
+
+Files:
+        sttyl does not open any file.
+

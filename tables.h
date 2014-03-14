@@ -9,6 +9,6 @@ extern const struct trecord input_flags[];
 extern const struct trecord output_flags[];
 extern const struct trecord local_flags[];
 
-extern tcflag_t get_flag_mask(char *name, const struct trecord *table);
+extern struct trecord get_flag_mask(char *name, const struct trecord *table);
 
 #endif

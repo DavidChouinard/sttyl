@@ -32,34 +32,13 @@ const struct trecord baud_rates[] = {
 // A subset of relevant control characters
 const struct trecord control_characters[] = {
     {VINTR, "intr"},
-    {VQUIT, "vquit"},
+    {VKILL, "kill"},
     {VERASE, "erase"},
-    {VEOF, "veof"},
-    {VEOL, "veol"},
-    {VEOL2, "veol2"},
-    {VSTART, "vstart"},
-    {VSTOP, "vstop"},
-    {VMIN, "min"},
-    {VTIME, "time"},
     {0, NULL}
 };
 
 // A subset of relevant flags
 const struct trecord input_flags[] = {
-    /*{IGNBRK, "ignbrk"},*/
-    /*{BRKINT, "brkint"},*/
-    /*{IGNPAR, "ignpar"},*/
-    /*{PARMRK, "parmrk"},*/
-    /*{INPCK, "inpck"},*/
-    /*{ISTRIP, "istrip"},*/
-    /*{INLCR, "inlcr"},*/
-    /*{IGNCR, "igncr"},*/
-    /*{IUCLC, "iuclc"},*/
-    /*{IXON, "ixon"},*/
-    /*{IXANY, "ixany"},*/
-    /*{IXOFF, "ixoff"},*/
-    /*{IMAXBEL, "imaxbel"},*/
-    /*{IUTF8, "iutf8"},*/
     {ICRNL, "icrnl"},
     {0, NULL}
 };
@@ -78,11 +57,20 @@ const struct trecord local_flags[] = {
     {0, NULL}
 };
 
-tcflag_t get_flag_mask(char *flag_name, const struct trecord *table) {
+/*
+ * Peforms an O(n) sequential search on the passed table for a record matching
+ * the passed name paramater. Returns a {0, NULL} record if not found.
+ *
+ * Arguments:
+ *    char *flag_name: flag name to search for
+ *    const struct trecord *table: table to search
+ */
+struct trecord get_flag_mask(char *name, const struct trecord *table) {
     for (int i = 0; table[i].name != NULL; i++) {
-        if (strcmp(table[i].name, flag_name) == 0)
-            return table[i].value;
+        if (strcmp(table[i].name, name) == 0)
+            return table[i];
     }
 
-    return -1;
+    // Didn't find a matching record
+    return (struct trecord) {0, NULL};
 }

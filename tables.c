@@ -1,11 +1,14 @@
 #include <stdio.h>
+#include <stddef.h>
 #include <string.h>
 #include <termios.h>
 
 #include "tables.h"
 
-// Ideally, the values would be ints, but since we want to reuse the same
-// infrastructure, we use strings
+/*
+ * Baud rates. Ideally, the values would be ints, but since we want to reuse
+ * the same infrastructure, we use strings
+ */
 const struct trecord baud_rates[] = {
     {B0, "0"},
     {B50, "50"},
@@ -29,7 +32,9 @@ const struct trecord baud_rates[] = {
     {0, NULL}
 };
 
-// A subset of relevant control characters
+/*
+ * A subset of relevant control characters
+ */
 const struct trecord control_characters[] = {
     {VINTR, "intr"},
     {VKILL, "kill"},
@@ -37,18 +42,26 @@ const struct trecord control_characters[] = {
     {0, NULL}
 };
 
-// A subset of relevant flags
+/*
+ * A subset of relevant input flags
+ */
 const struct trecord input_flags[] = {
     {ICRNL, "icrnl"},
     {0, NULL}
 };
 
+/*
+ * A subset of relevant output flags
+ */
 const struct trecord output_flags[] = {
     {ONLCR, "onlcr"},
     {OLCUC, "olcuc"}, // Not standard in POSIX
     {0, NULL}
 };
 
+/*
+ * A subset of relevant local flags
+ */
 const struct trecord local_flags[] = {
     {ECHO, "echo"},
     {ECHOE, "echoe"},
@@ -56,6 +69,18 @@ const struct trecord local_flags[] = {
     {ICANON, "icanon"},
     {0, NULL}
 };
+
+/*
+ * Table containing known flag tables and their matching flag offset in the
+ * termios structure
+ */
+const struct frecord flag_types[] = {
+    {input_flags, offsetof(struct termios, c_iflag)},
+    {output_flags, offsetof(struct termios, c_oflag)},
+    {local_flags, offsetof(struct termios, c_lflag)},
+    {NULL, 0}
+};
+
 
 /*
  * Peforms an O(n) sequential search on the passed table for a record matching

@@ -5,7 +5,8 @@
  *   Date: March 5 2014
  *   Desc: sttyl prints or changes current terminal settings. It operates on
  *         control chracters and a subset of input, output and local flags.
- *         It is meant as a replacement for the GNU stty utility (but only provides a subset of functionality).
+ *         It is meant as a replacement for the GNU stty utility (but only
+ *         provides a subset of functionality).
  *  Usage:
  *         sttyl [SETTING]...
  */
@@ -21,7 +22,13 @@
 #include "tables.h"
 
 
-#define CHAR_HIGH_ORDER_BIT (1 << 7)  /* High-order bit of an 8-bit char */
+#define CHAR_HIGH_ORDER_BIT (1 << 7)  // High-order bit of an 8-bit char
+
+/*
+ * Given a termios structure and a byte offset, returns the tcflag_t flag at
+ * that offset
+ */
+#define GET_FLAG_FROM_OFFSET(ttyp, offset) (tcflag_t *)(((char*)ttyp) + offset)
 
 
 /* prototypes */
@@ -34,9 +41,10 @@ void parse_args(struct termios *ttyp, int argc, char* argv[]);
 void argument_error(char *message, char *argument);
 bool is_valid_flag_name(char *flag_name);
 void update_flag(struct termios *ttyp, char *flag_name, bool enable_flag);
-tcflag_t update_flag_struct(tcflag_t flag, char *flag_name, bool enable_flag,
+void update_flag_struct(tcflag_t *flag, char *flag_name, bool enable_flag,
         const struct trecord *table);
 void save_tty(struct termios *ttyp);
+void partial_save_error();
 
 
 int main(int argc, char* argv[]) {
@@ -48,7 +56,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (argc <= 1)
-        print_settings(&ttyp); // user just wants to see current setting status
+        print_settings(&ttyp);  // user just wants to see current settings
 
     // Parse args and call appropriate functions for processing
     parse_args(&ttyp, argc, argv);
@@ -71,7 +79,6 @@ void print_settings(struct termios *ttyp) {
     putchar('\n');
 
     print_flags(ttyp);
-    putchar('\n');
 
     exit(EXIT_SUCCESS);
 }
@@ -116,7 +123,7 @@ void print_characters(cc_t cc[]) {
             printf("<undef>");  // control character is disabled
         } else {
             if (!isascii(ch)) {
-                ch &= ~CHAR_HIGH_ORDER_BIT; // get the ascii part of the character
+                ch &= ~CHAR_HIGH_ORDER_BIT; // get ascii part of the character
                 printf("M-");
             }
             if (iscntrl(ch)) {
@@ -139,11 +146,10 @@ void print_characters(cc_t cc[]) {
  *    struct termios *ttyp: termios structure of the relevant terminal
  */
 void print_flags(struct termios *ttyp) {
-    print_flags_from_table(ttyp->c_iflag, input_flags);
-    putchar('\n');
-    print_flags_from_table(ttyp->c_oflag, output_flags);
-    putchar('\n');
-    print_flags_from_table(ttyp->c_lflag, local_flags);
+    for (int i=0; flag_types[i].table != NULL; i++) {
+        print_flags_from_table(flag_types[i].offset, flag_types[i].table);
+        putchar('\n');
+    }
 }
 
 /*
@@ -220,9 +226,13 @@ void argument_error(char *message, char *argument) {
  *    char *flag_name: flag name to validate
  */
 bool is_valid_flag_name(char *flag_name) {
-    return (get_flag_mask(flag_name, input_flags).name != NULL ||
-            get_flag_mask(flag_name, output_flags).name != NULL ||
-            get_flag_mask(flag_name, local_flags).name != NULL);
+
+    for (int i=0; flag_types[i].table != NULL; i++) {
+        if (get_flag_mask(flag_name, flag_types[i].table).name != NULL)
+            return true;   // found the flag, it's valid
+    }
+
+    return false;
 }
 
 /*
@@ -234,17 +244,15 @@ bool is_valid_flag_name(char *flag_name) {
  *    char *enable_flag: if true, enable that flag, else disable it
  */
 void update_flag(struct termios *ttyp, char *flag_name, bool enable_flag) {
-    ttyp->c_iflag = update_flag_struct(ttyp->c_iflag, flag_name, enable_flag,
-            input_flags);
-    ttyp->c_oflag = update_flag_struct(ttyp->c_oflag, flag_name, enable_flag,
-            output_flags);
-    ttyp->c_lflag = update_flag_struct(ttyp->c_lflag, flag_name, enable_flag,
-            local_flags);
+    for (int i=0; flag_types[i].table != NULL; i++) {
+        tcflag_t *flag = GET_FLAG_FROM_OFFSET(ttyp, flag_types[i].offset);
+        update_flag_struct(flag, flag_name, enable_flag, flag_types[i].table);
+    }
 }
 
 /*
- * Returns an updated flag using the passed flag table (and returns the
- * unmodified input flag if not present in the flag table)
+ * Updates the passed flag in-place using the passed flag table. Does not modify
+ * the flag if the flag name is not found in the flag table.
  *
  * Arguments:
  *    tcflag_t flag: flag element from the termios structure
@@ -252,17 +260,17 @@ void update_flag(struct termios *ttyp, char *flag_name, bool enable_flag) {
  *    char *enable_flag: if true, enable that flag, else disable it
  *    const struct trecord *table: relevant flag table for this tcflag_t
  */
-tcflag_t update_flag_struct(tcflag_t flag, char *flag_name, bool enable_flag,
+void update_flag_struct(tcflag_t *flag, char *flag_name, bool enable_flag,
         const struct trecord *table) {
     struct trecord record = get_flag_mask(flag_name, table);
 
     if (record.name == NULL)
-        return flag;  // we don't know about that, nothing to do here
+        return;  // we don't know about that, nothing to do here
 
     if (enable_flag)
-        return (flag |= record.value);   // turn on masked bit
+        *flag |= record.value;   // turn on masked bit
     else
-        return (flag &= ~record.value);  // turn off masked bit
+        *flag &= ~record.value;   // turn off masked bit
 }
 
 /*
@@ -278,12 +286,8 @@ void save_tty(struct termios *ttyp) {
         exit(EXIT_FAILURE);
     }
 
-    // Thoroughly verify that the changes were written. From the man page:
-    //
-    //   Note that tcsetattr() returns success if any of the requested changes
-    //   could be successfully carried out. Therefore, when making multiple
-    //   changes it may be necessary to follow this call with a further call to
-    //   tcgetattr() to check that all changes have been performed successfully.
+    // Additional check to verify that the changes were saved, since tcsetattr
+    // claims success when ANY of the requested changes were made.
     struct termios ttyp_current;
 
     if (tcgetattr(0, &ttyp_current) == -1) {
@@ -291,12 +295,26 @@ void save_tty(struct termios *ttyp) {
         exit(EXIT_FAILURE);
     }
 
-    // TODO: compare array
-    if (ttyp->c_iflag != ttyp_current.c_iflag ||
-            ttyp->c_oflag != ttyp_current.c_oflag ||
-            ttyp->c_lflag != ttyp_current.c_lflag ||
-            memcmp(ttyp->c_cc, ttyp_current.c_cc, sizeof(ttyp->c_cc))) {
-        fputs("Some (but not all) terminal setting changes were not correctly saved", stderr);
-        exit(EXIT_FAILURE);
+    // Check that each flag setting was correctly saved
+    for (int i=0; flag_types[i].table != NULL; i++) {
+        if (*GET_FLAG_FROM_OFFSET(ttyp, flag_types[i].offset) !=
+                *GET_FLAG_FROM_OFFSET(&ttyp_current, flag_types[i].offset)) {
+            partial_save_error();
+        }
     }
+
+    // Check that control characters were correctly saved
+    if (memcmp(ttyp->c_cc, ttyp_current.c_cc, sizeof(ttyp->c_cc))) {
+        partial_save_error();
+    }
+}
+
+
+/*
+ * Prints a terminal setting save error message to stderr and exits
+ */
+void partial_save_error() {
+    fputs("Some (but not all) terminal setting changes were not correctly"
+            " saved", stderr);
+    exit(EXIT_FAILURE);
 }

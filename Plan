@@ -39,8 +39,8 @@ Output:
         stderr and exits with non-zero status.
 
 Arguments:
-        All arguments to sttyl are optional; sttyl will output current settings
-        if given no argument. sttyl's usage is as follows:
+        All arguments to sttyl are optional; sttyl will output current terminal
+        settings if given no argument. Its usage is as follows:
 
             sttyl [SETTING]...
 
@@ -49,12 +49,12 @@ Arguments:
             * A control flag (eg. icrnl). If preceded by a dash (eg. -icrnl),
               the flag is disabled, else the flag is enabled.
             * A control character followed by a single character to set as its
-              value, seperated by a space (eg. `erase k')
+              value, separated by a space (eg. `erase k')
 
         The following are acceptable flag name values: icrnl, onlcr, olcuc,
         echo, echoe, sigi, icanon
 
-        The following are acceptable control character names: intr, kill, erase
+        The following are acceptable control character names: kill, erase
 
         Any number of setting arguments can be passed and they can be provided
         in any order. If duplicate settings are provided, the last one is
@@ -68,9 +68,22 @@ Data Structures:
         sttyl's functionality is principally achieved by operating on the
         termios structure returned by tcgetattr.
 
-        sttyl uses a table-driven approach to map human-readable symbols to
-        internal values used to operate on the termios structure (eg. mapping
-        "kill" to VKILL). The following five tables are required by sttyl:
+        sttyl uses a table-driven approach. Tables are defined in table.c and
+        their interface is available in table.h. Tables are implemented as an
+        array of structs.
+
+        sttyl relies on trecord and frecord structs to provide two different
+        table "schemas".
+
+        trecord tables
+        ===============
+
+        trecord structs are comprised of a tcflag_t value and a char* name.
+        They are used to map human-readable symbols to internal values used to
+        operate on the termios structure (eg. mapping "kill" to VKILL).
+
+        The following five trecord tables are required by sttyl (one for each of
+        the supported terminal setting):
 
           * baud_rates
           * control_characters
@@ -78,22 +91,43 @@ Data Structures:
           * output_flags
           * local_flags
 
-        Tables are defined in table.c and their interface is available in
-        table.h. Tables are implemented as an array of structs which contain
-        an integer value and a char* name.
-
-        A table ends with a sentinel struct who's name element is NULL (eg.
-        {0, NULL}). Therefore, this design decision implies that the table data
-        structure cannot contain legitmate NULL names, which is acceptable for
-        this application.
-
         table.h also declares a single helper function (get_flag_mask)
-        for searching the table data structure and finding a matching record
-        given a name. It returns a {0, NULL} record structure if a matching
+        for searching the trecord table data structure and finding a matching
+        record given a name. It returns a {0, NULL} trecord if a matching
         record is not found.
 
+        frecord tables
+        ===============
+
+        frecord structs are comprised of a size_t *offset and a pointer to a
+        trecord table. As such, frecord tables build on top of trecord tables
+        to essentially provide table metadata for some tables. Specifically,
+        frecord tables store the termios structure byte offset of the flag
+        setting associated with the three flag trecord tables.
+
+        Only one frecord table is needed by stty. (called flag_types)
+
+        A GET_FLAG_FROM_OFFSET macro is provided to convert a particular
+        termios structure and an offset to a usable tcflag_t flag.
+
+        This design thus supports general and modular code while still
+        maintaining readability. For example, iterating pairwise over matching
+        tables and tcflag_t flag can be achieved like so:
+
+        for (int i=0; flag_types[i].table != NULL; i++) {
+            tcflag_t *flag = GET_FLAG_FROM_OFFSET(ttyp, flag_types[i].offset);
+            // flag_types[i].table is the table associated with flag
+        }
+
+        All tables end with a sentinel struct whose name/table element is NULL
+        (eg. {0, NULL}). Therefore, this design decision implies that the table
+        data structure cannot contain legitimate NULL values, which is
+        acceptable for this application.
+
         If tables grew to be much larger, using a hash table would be more
-        efficient and would avoid O(n) sequential searches.
+        efficient and would avoid O(n) sequential searches. However, there is
+        a large constant hidden in a hashtable's O(1) performance and using a
+        hashtable only provide a performance gain for very large tables.
 
 Files:
         sttyl does not open any file.
